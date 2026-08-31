@@ -150,40 +150,195 @@ function LoginScreen({onLogin}){
   );
 }
 
-/* ── DASHBOARD ────────────────────────────────────────────── */
+/* \u2500\u2500 MODAL DETALLE CLIENTE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+function ModalCliente({p,onClose}){
+  if(!p)return null;
+  const h=HOY();
+  const fechas=fechasCuotas(p);
+  const ab=totalAbonado(p);
+  const deuda=totalDeuda(p);
+  const saldo=saldoTotal(p);
+  const atras=saldoAtrasado(p);
+  const pct=Math.round(ab/deuda*100);
+  const abs2=(p.abonos||[]).filter(a=>a&&a.monto>0&&a.fecha).sort((a,b)=>parseD(b.fecha)-parseD(a.fecha));
+  const nSlots=Math.max(10,(p.abonos||[]).length);
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200,padding:16}} onClick={onClose}>
+      <div style={{background:'#fff',borderRadius:14,width:'100%',maxWidth:700,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 24px 48px rgba(0,0,0,.25)'}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:'18px 22px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:C.greenBg,borderRadius:'14px 14px 0 0'}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:700,color:C.green}}>{p.nombre}</div>
+            <div style={{fontSize:13,color:C.muted,marginTop:3,display:'flex',alignItems:'center',gap:6}}><RTag r={p.ruta}/><CobTag r={p.ruta}/>{p.tel&&<span>\u{1F4DE} {p.tel}</span>}</div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',fontSize:24,cursor:'pointer',color:C.muted,lineHeight:1}}>&#x2715;</button>
+        </div>
+        <div style={{padding:'18px 22px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:10,marginBottom:16}}>
+            <KPI label="Capital prestado" value={fmt(p.monto)} sub={fmtFL(parseD(p.fechaPrestamo))}/>
+            <KPI label="Total a recibir" value={fmt(deuda)}/>
+            <KPI label="Abonado" value={fmt(ab)} vc={C.ok} sub={pct+'% recuperado'}/>
+            <KPI label="Saldo por cobrar" value={fmt(saldo)} vc={saldo<0.5?C.ok:C.danger}/>
+            {atras>0.5&&<KPI label="Atrasado" value={fmt(atras)} vc={C.danger}/>}
+          </div>
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:5,fontWeight:600}}>Progreso de pago \u2014 {pct}%</div>
+            <div style={{height:8,borderRadius:4,background:C.s2,overflow:'hidden'}}><div style={{height:'100%',borderRadius:4,background:pct>=100?C.ok:C.green,width:Math.min(100,pct)+'%'}}/></div>
+          </div>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:10}}>Trazabilidad de cuotas</div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:500}}>
+              <thead><tr>{['Cuota','Fecha vence','Pactado','Abonado','Fecha abono','Estado','Saldo cuota'].map((h,i)=><th key={i} style={{textAlign:'left',padding:'6px 8px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}>{h}</th>)}</tr></thead>
+              <tbody>
+                {Array.from({length:nSlots},(_,i)=>{
+                  const f=i<fechas.length?fechas[i]:null;
+                  const m=abonoMonto(p,i);
+                  const fa=abonoFecha(p,i);
+                  const e=estadoCuota(p,i,h);
+                  const s=saldoCuota(p,i);
+                  let rowBg='transparent',eLabel='Pendiente',eColor=C.faint;
+                  if(e==='completa'){rowBg=C.okBg+'55';eLabel='\u2713 Completa';eColor=C.ok;}
+                  else if(e==='parcial'){rowBg=C.warnBg+'55';eLabel='\u7e Parcial';eColor=C.warn;}
+                  else if(e==='nopago'||e==='sinregistro'){rowBg=C.dangerBg+'55';eLabel='\u2717 Sin pago';eColor=C.danger;}
+                  else if(e==='futuro'){eLabel='Futuro';eColor=C.faint;}
+                  return(
+                    <tr key={i} style={{borderBottom:`1px solid ${C.border}`,background:rowBg}}>
+                      <td style={{padding:'7px 8px',fontWeight:600}}>{i>=10?'Ext':'C'+(i+1)}</td>
+                      <td style={{padding:'7px 8px',fontSize:11,color:C.muted}}>{f?fmtF(f):'—'}</td>
+                      <td style={{padding:'7px 8px',color:C.muted}}>{fmt(i>=10&&saldoTotal(p)>0.5?saldoTotal(p):p.cuota)}</td>
+                      <td style={{padding:'7px 8px',fontWeight:600,color:m!=null&&m>0?C.ok:C.faint}}>{m!=null?fmt(m):'—'}</td>
+                      <td style={{padding:'7px 8px',fontSize:11,color:C.muted}}>{fa?fmtF(parseD(fa)):'—'}</td>
+                      <td style={{padding:'7px 8px'}}><span style={{color:eColor,fontWeight:600,fontSize:11}}>{eLabel}</span></td>
+                      <td style={{padding:'7px 8px',fontWeight:600,color:s<0.5?C.ok:C.danger}}>{s<0.5?'\u2713 Saldo 0':fmt(s)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {abs2.length>0&&<div style={{marginTop:16}}><div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:8}}>Historial de abonos</div><div style={{display:'flex',flexDirection:'column',gap:5}}>{abs2.map((a,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 12px',background:C.s2,borderRadius:7,fontSize:13}}><span style={{color:C.muted}}>{fmtFL(parseD(a.fecha))}</span><span style={{fontWeight:700,color:C.ok}}>{fmt(a.monto)}</span></div>)}</div></div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* \u2500\u2500 MODAL DETALLE SEMANA \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+function ModalSemana({lun,dom,prestamos,onClose}){
+  if(!lun)return null;
+  const recs=todosLosRecaudos(prestamos).filter(x=>enRango(x.fecha,lun,dom));
+  const nuevos=prestamos.filter(p=>enRango(parseD(p.fechaPrestamo),lun,dom));
+  const totalRec=recs.reduce((s,x)=>s+x.monto,0);
+  const totalPres=nuevos.reduce((s,p)=>s+p.monto,0);
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200,padding:16}} onClick={onClose}>
+      <div style={{background:'#fff',borderRadius:14,width:'100%',maxWidth:640,maxHeight:'85vh',overflowY:'auto',boxShadow:'0 24px 48px rgba(0,0,0,.25)'}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:'16px 22px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:C.greenBg,borderRadius:'14px 14px 0 0'}}>
+          <div style={{fontSize:16,fontWeight:700,color:C.green}}>{fmtF(lun)} \u2014 {fmtF(dom)}</div>
+          <button onClick={onClose} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:C.muted}}>&#x2715;</button>
+        </div>
+        <div style={{padding:'16px 22px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
+            <KPI label="Recaudado" value={fmt(totalRec)} vc={C.ok} sub={recs.length+' abonos'}/>
+            <KPI label="Prestado nuevo" value={fmt(totalPres)} sub={nuevos.length+' pr\xe9stamos'}/>
+            <KPI label="Flujo neto" value={(totalRec-totalPres>=0?'+':'')+fmt(totalRec-totalPres)} vc={totalRec-totalPres>=0?C.ok:C.danger}/>
+          </div>
+          {recs.length>0&&<div style={{marginBottom:16}}><div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Abonos recibidos ({recs.length})</div><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}><thead><tr>{['Cliente','Ruta','Cobrador','Cuota','Monto'].map((h,i)=><th key={i} style={{textAlign:'left',padding:'5px 8px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}>{h}</th>)}</tr></thead><tbody>{recs.map((x,i)=><tr key={i} style={{borderBottom:`1px solid ${C.border}`}}><td style={{padding:'7px 8px',fontWeight:600}}>{x.p.nombre}</td><td style={{padding:'7px 4px'}}><RTag r={x.p.ruta}/></td><td style={{padding:'7px 4px'}}><CobTag r={x.p.ruta}/></td><td style={{padding:'7px 8px'}}>C{x.i+1}</td><td style={{padding:'7px 8px',fontWeight:600,color:C.ok}}>{fmt(x.monto)}</td></tr>)}</tbody></table></div></div>}
+          {nuevos.length>0&&<div><div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Pr\xe9stamos nuevos ({nuevos.length})</div><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}><thead><tr>{['Cliente','Ruta','Monto','Cuota semanal'].map((h,i)=><th key={i} style={{textAlign:'left',padding:'5px 8px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}>{h}</th>)}</tr></thead><tbody>{nuevos.map((p,i)=><tr key={i} style={{borderBottom:`1px solid ${C.border}`}}><td style={{padding:'7px 8px',fontWeight:600}}>{p.nombre}</td><td style={{padding:'7px 4px'}}><RTag r={p.ruta}/></td><td style={{padding:'7px 8px',fontWeight:600}}>{fmt(p.monto)}</td><td style={{padding:'7px 8px',color:C.muted}}>{fmt(p.cuota)}</td></tr>)}</tbody></table></div></div>}
+          {recs.length===0&&nuevos.length===0&&<div style={{textAlign:'center',padding:'2rem',color:C.faint}}>Sin movimiento esta semana</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* \u2500\u2500 DASHBOARD \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
 function Dashboard({prestamos,flujoOff,setFlujoOff,currentUser}){
+  const [modalCliente,setModalCliente]=useState(null);
+  const [modalSemana,setModalSemana]=useState(null);
+  const [modalKpi,setModalKpi]=useState(null);
   const activos=useMemo(()=>prestamos.filter(p=>!isTerminado(p)),[prestamos]);
   const recs=useMemo(()=>todosLosRecaudos(prestamos),[prestamos]);
   const {lun,dom}=semRango(0);
   const {lun:fL,dom:fD}=semRango(flujoOff);
   const recSem=recs.filter(x=>enRango(x.fecha,lun,dom)).reduce((s,x)=>s+x.monto,0);
-  const coEsta=[]; activos.forEach(p=>fechasCuotas(p).forEach((f,i)=>{if(enRango(f,lun,dom))coEsta.push({p,i});}));
+  const coEsta=[];activos.forEach(p=>fechasCuotas(p).forEach((f,i)=>{if(enRango(f,lun,dom))coEsta.push({p,i});}));
   const esp=coEsta.reduce((s,x)=>s+x.p.cuota,0);
   const valPrestado=activos.reduce((s,p)=>s+saldoTotal(p),0);
   const totalAtras=activos.reduce((s,p)=>s+saldoAtrasado(p),0);
   const conSaldo=activos.filter(tieneSaldoAtrasado).length;
   const flujo=useMemo(()=>{
-    const out={}; ['A','B','C'].forEach(r=>{out[r]={recogido:0,nAbonos:0,capital:0,nPrestamos:0,nNuevos:0,nRepiten:0};});
+    const out={};['A','B','C'].forEach(r=>{out[r]={recogido:0,nAbonos:0,capital:0,nPrestamos:0,nNuevos:0,nRepiten:0};});
     recs.forEach(rc=>{if(enRango(rc.fecha,fL,fD)){out[rc.p.ruta].recogido+=rc.monto;out[rc.p.ruta].nAbonos++;}});
     prestamos.forEach(p=>{const fp=parseD(p.fechaPrestamo);if(enRango(fp,fL,fD)){out[p.ruta].capital+=p.monto;out[p.ruta].nPrestamos++;if(esPrimerPrestamo(p,prestamos))out[p.ruta].nNuevos++;else out[p.ruta].nRepiten++;}});
     return out;
   },[prestamos,flujoOff]);
-  const HIST=8; const hist=useMemo(()=>Array.from({length:HIST},(_,k)=>{ const r=semRango(flujoOff-(HIST-1-k)); const f={}; ['A','B','C'].forEach(rt=>{f[rt]={recogido:0,nPrestamos:0,capital:0};}); recs.forEach(rc=>{if(enRango(rc.fecha,r.lun,r.dom))f[rc.p.ruta].recogido+=rc.monto;}); prestamos.forEach(p=>{if(enRango(parseD(p.fechaPrestamo),r.lun,r.dom)){f[p.ruta].capital+=p.monto;f[p.ruta].nPrestamos++;}}); return{lun:r.lun,dom:r.dom,f}; }),[prestamos,flujoOff]);
+  const HIST=14;
+  const hist=useMemo(()=>Array.from({length:HIST},(_,k)=>{
+    const r=semRango(-(HIST-1-k));
+    const f={};['A','B','C'].forEach(rt=>{f[rt]={recogido:0,nPrestamos:0,capital:0};});
+    recs.forEach(rc=>{if(enRango(rc.fecha,r.lun,r.dom))f[rc.p.ruta].recogido+=rc.monto;});
+    prestamos.forEach(p=>{if(enRango(parseD(p.fechaPrestamo),r.lun,r.dom)){f[p.ruta].capital+=p.monto;f[p.ruta].nPrestamos++;}});
+    return{lun:r.lun,dom:r.dom,f};
+  }),[prestamos]);
+
+  const kpiListas={
+    activos:activos.sort((a,b)=>saldoTotal(b)-saldoTotal(a)),
+    atrasados:activos.filter(tieneSaldoAtrasado).sort((a,b)=>saldoAtrasado(b)-saldoAtrasado(a)),
+    porCobrar:activos.sort((a,b)=>saldoTotal(b)-saldoTotal(a)),
+  };
+  const kpiTitulos={activos:'Clientes activos',atrasados:'Clientes con saldo atrasado',porCobrar:'D\xf3nde est\xe1 tu plata \u2014 por cliente'};
+
   return(
     <div>
+      {modalCliente&&<ModalCliente p={modalCliente} onClose={()=>setModalCliente(null)}/>}
+      {modalSemana&&<ModalSemana lun={modalSemana.lun} dom={modalSemana.dom} prestamos={prestamos} onClose={()=>setModalSemana(null)}/>}
+      {modalKpi&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200,padding:16}} onClick={()=>setModalKpi(null)}>
+          <div style={{background:'#fff',borderRadius:14,width:'100%',maxWidth:680,maxHeight:'85vh',overflowY:'auto',boxShadow:'0 24px 48px rgba(0,0,0,.25)'}} onClick={e=>e.stopPropagation()}>
+            <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:C.greenBg,borderRadius:'14px 14px 0 0'}}>
+              <div style={{fontSize:16,fontWeight:700,color:C.green}}>{kpiTitulos[modalKpi]}</div>
+              <button onClick={()=>setModalKpi(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:C.muted}}>&#x2715;</button>
+            </div>
+            <div style={{padding:'12px 20px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:8,fontWeight:700,fontSize:10,color:C.muted,borderBottom:`2px solid ${C.border}`,paddingBottom:8,marginBottom:4}}>
+                <span>CLIENTE</span><span>RUTA</span><span style={{textAlign:'right'}}>SALDO</span>
+              </div>
+              {(kpiListas[modalKpi]||[]).map((p,i)=>(
+                <div key={i} onClick={()=>{setModalKpi(null);setModalCliente(p);}} style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:8,padding:'10px 4px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',borderRadius:6,transition:'background .1s'}} onMouseEnter={e=>e.currentTarget.style.background=C.s2} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                  <span style={{fontWeight:600}}>{p.nombre}</span>
+                  <span><RTag r={p.ruta}/><CobTag r={p.ruta}/></span>
+                  <span style={{textAlign:'right',fontWeight:700,color:modalKpi==='atrasados'?C.danger:C.green}}>{fmt(modalKpi==='atrasados'?saldoAtrasado(p):saldoTotal(p))}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{fontSize:20,fontWeight:700,marginBottom:14}}>Dashboard</div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(128px,1fr))',gap:9,marginBottom:14}}>
-        <KPI label="Clientes activos" value={activos.length} sub="préstamos vigentes"/>
-        <KPI label="Total por cobrar" value={fmt(valPrestado)} vc={C.green}/>
-        <KPI label="Recaudado esta semana" value={fmt(recSem)} sub={`de ${fmt(esp)} esperado`} vc={C.ok}/>
-        <KPI label="Saldo atrasado" value={fmt(totalAtras)} sub={`${conSaldo} clientes`} vc={C.danger}/>
-        <KPI label="Capital entregado" value={fmt(activos.reduce((s,p)=>s+p.monto,0))} sub="sin interés"/>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(148px,1fr))',gap:10,marginBottom:16}}>
+        {[
+          {label:'Clientes activos',value:String(activos.length),sub:'pr\xe9stamos vigentes',vc:C.green,key:'activos',tip:'Ver lista completa \u2192'},
+          {label:'Total por cobrar',value:fmt(valPrestado),sub:'saldo activos',vc:C.green,key:'porCobrar',tip:'Ver por cliente \u2192'},
+          {label:'Recaudado esta semana',value:fmt(recSem),sub:`de ${fmt(esp)} esperado`,vc:C.ok,key:null,tip:null},
+          {label:'Saldo atrasado',value:fmt(totalAtras),sub:`${conSaldo} clientes`,vc:C.danger,key:'atrasados',tip:'Ver atrasados \u2192'},
+          {label:'Capital entregado',value:fmt(activos.reduce((s,p)=>s+p.monto,0)),sub:'sin inter\xe9s',vc:null,key:'activos',tip:'Ver detalle \u2192'},
+        ].map((kpi,i)=>(
+          <div key={i} onClick={()=>kpi.key&&setModalKpi(kpi.key)} style={{background:C.surface,border:`1px solid ${kpi.key?C.green+'44':C.border}`,borderRadius:10,padding:'13px 15px',cursor:kpi.key?'pointer':'default',transition:'all .15s',position:'relative'}} onMouseEnter={e=>{if(kpi.key)e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.10)';}} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+            <div style={{fontSize:11,color:C.muted,marginBottom:3}}>{kpi.label}</div>
+            <div style={{fontSize:20,fontWeight:700,color:kpi.vc||C.text,lineHeight:1.1}}>{kpi.value}</div>
+            <div style={{fontSize:11,color:C.faint,marginTop:2}}>{kpi.sub}</div>
+            {kpi.tip&&<div style={{fontSize:10,color:C.green,marginTop:5,fontWeight:600}}>{kpi.tip}</div>}
+          </div>
+        ))}
       </div>
+
       <Panel title="Flujo por ruta" tr={
         <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
-          <Btn sm onClick={()=>setFlujoOff(f=>f-1)}>‹</Btn>
-          <span style={{fontSize:12,fontWeight:600,minWidth:200,textAlign:'center'}}>{fmtF(fL)} — {fmtF(fD)}</span>
-          <Btn sm onClick={()=>setFlujoOff(f=>f+1)}>›</Btn>
+          <Btn sm onClick={()=>setFlujoOff(f=>f-1)}>\u2039</Btn>
+          <span style={{fontSize:12,fontWeight:600,minWidth:200,textAlign:'center'}}>{fmtF(fL)} \u2014 {fmtF(fD)}</span>
+          <Btn sm onClick={()=>setFlujoOff(f=>f+1)}>\u203a</Btn>
           <Btn sm v="primary" onClick={()=>setFlujoOff(0)}>Esta semana</Btn>
         </div>
       }>
@@ -194,9 +349,9 @@ function Dashboard({prestamos,flujoOff,setFlujoOff,currentUser}){
               {['A','B','C'].map(k=>{const d=flujo[k];const neto=d.recogido-d.capital;return(
                 <tr key={k} style={{borderBottom:`1px solid ${C.border}`}}>
                   <td style={{padding:'9px'}}><RTag r={k}/><CobTag r={k}/><div style={{fontSize:11,color:C.faint,marginTop:2}}>{RUTAS[k].dia}</div></td>
-                  <td style={{padding:'9px'}}><div style={{fontSize:17,fontWeight:700,color:d.nPrestamos?C.green:C.faint}}>{d.nPrestamos||'—'}</div>{d.nPrestamos>0&&<div style={{fontSize:11,color:C.muted}}>{d.nNuevos} nuevo{d.nNuevos!==1?'s':''}{d.nRepiten?` · ${d.nRepiten} repite${d.nRepiten!==1?'n':''}`:''}</div>}</td>
-                  <td style={{padding:'9px',fontWeight:700,color:C.ok}}>{fmt(d.recogido)}<div style={{fontSize:11,color:C.faint,fontWeight:400}}>{d.nAbonos} abono{d.nAbonos!==1?'s':''}</div></td>
-                  <td style={{padding:'9px',fontWeight:600}}>{fmt(d.capital)}</td>
+                  <td style={{padding:'9px'}}><div style={{fontSize:17,fontWeight:700,color:d.nPrestamos?C.green:C.faint}}>{d.nPrestamos||'\u2014'}</div>{d.nPrestamos>0&&<div style={{fontSize:11,color:C.muted}}>{d.nNuevos} nuevo{d.nNuevos!==1?'s':''}{d.nRepiten?` \xb7 ${d.nRepiten} repite${d.nRepiten!==1?'n':''}`:''}</div>}</td>
+                  <td style={{padding:'9px',fontWeight:700,color:C.ok}}>{fmt(d.recogido)}<div style={{fontSize:11,color:C.faint,fontWeight:400}}>{d.nAbonos} abonos</div></td>
+                  <td style={{padding:'9px',fontWeight:600}}>{fmt(d.capital)}{d.nPrestamos>0&&<div style={{fontSize:11,color:C.faint,fontWeight:400}}>{d.nNuevos} nuevo{d.nNuevos!==1?'s':''}</div>}</td>
                   <td style={{padding:'9px',fontWeight:700,fontSize:14,color:neto>0?C.ok:neto<0?C.danger:C.muted}}>{neto>0?'+':''}{fmt(neto)}</td>
                 </tr>);})}
               {(()=>{const tR=['A','B','C'].reduce((s,k)=>s+flujo[k].recogido,0);const tC=['A','B','C'].reduce((s,k)=>s+flujo[k].capital,0);const n=tR-tC;return<tr style={{borderTop:`2px solid ${C.borderS}`,background:C.s2}}><td style={{padding:'9px',fontWeight:700}}>Total</td><td style={{padding:'9px',fontWeight:700}}>{['A','B','C'].reduce((s,k)=>s+flujo[k].nPrestamos,0)}</td><td style={{padding:'9px',fontWeight:700,color:C.ok}}>{fmt(tR)}</td><td style={{padding:'9px',fontWeight:700}}>{fmt(tC)}</td><td style={{padding:'9px',fontWeight:700,fontSize:14,color:n>0?C.ok:n<0?C.danger:C.muted}}>{n>0?'+':''}{fmt(n)}</td></tr>;})()}
@@ -204,14 +359,79 @@ function Dashboard({prestamos,flujoOff,setFlujoOff,currentUser}){
           </table>
         </div>
       </Panel>
-      <Panel title={`Historial — últimas ${HIST} semanas`}>
+
+      <Panel title={`Historial \u2014 \xfaltimas ${HIST} semanas`} tr={<span style={{fontSize:11,color:C.green,fontWeight:600}}>Haz clic en una fila para ver el detalle \u2193</span>}>
         <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:680}}>
-            <thead><tr><th style={{textAlign:'left',padding:'5px 8px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}>Semana</th>{['A','B','C'].map(k=>[<th key={k+'r'} style={{padding:'5px 7px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}><RTag r={k}/> Recogido</th>,<th key={k+'p'} style={{padding:'5px 7px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}>Prestado</th>])}</tr></thead>
-            <tbody>{hist.map((x,idx)=>{ const esA=x.lun.getTime()===semRango(flujoOff).lun.getTime(); return <tr key={idx} style={{borderBottom:`1px solid ${C.border}`,background:esA?C.greenBg:undefined}}><td style={{padding:'6px 8px',fontSize:11,color:esA?C.green:C.muted,fontWeight:esA?700:400}}>{x.lun.getDate()} {MESES[x.lun.getMonth()]} — {x.dom.getDate()} {MESES[x.dom.getMonth()]}</td>{['A','B','C'].map(k=>[<td key={k+'r'} style={{padding:'6px 7px',fontWeight:600,color:x.f[k].recogido?C.ok:C.faint}}>{x.f[k].recogido?fmt(x.f[k].recogido):'—'}</td>,<td key={k+'p'} style={{padding:'6px 7px',color:x.f[k].capital?C.text:C.faint}}>{x.f[k].capital?fmt(x.f[k].capital):'—'}</td>])}</tr>; })}</tbody>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:760}}>
+            <thead>
+              <tr>
+                <th style={{textAlign:'left',padding:'5px 8px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}>Semana</th>
+                {['A','B','C'].map(k=>[
+                  <th key={k+'r'} style={{padding:'5px 7px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}><RTag r={k}/> Recogido</th>,
+                  <th key={k+'p'} style={{padding:'5px 7px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}>Prestado</th>,
+                ])}
+                <th style={{padding:'5px 7px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}>Total recog.</th>
+                <th style={{padding:'5px 7px',fontSize:10,color:C.muted,fontWeight:700,borderBottom:`2px solid ${C.border}`}}>Flujo neto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hist.map((x,idx)=>{
+                const esA=x.lun.getTime()===semRango(0).lun.getTime();
+                const totR=['A','B','C'].reduce((s,k)=>s+x.f[k].recogido,0);
+                const totP=['A','B','C'].reduce((s,k)=>s+x.f[k].capital,0);
+                const neto=totR-totP;
+                return(
+                  <tr key={idx} onClick={()=>setModalSemana({lun:x.lun,dom:x.dom})} style={{borderBottom:`1px solid ${C.border}`,background:esA?C.greenBg:'transparent',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=esA?C.greenBg:C.s2} onMouseLeave={e=>e.currentTarget.style.background=esA?C.greenBg:'transparent'}>
+                    <td style={{padding:'8px',fontSize:11,color:esA?C.green:C.muted,fontWeight:esA?700:400}}>{x.lun.getDate()} {MESES[x.lun.getMonth()]} \u2014 {x.dom.getDate()} {MESES[x.dom.getMonth()]}{esA&&<div style={{fontSize:10,color:C.green}}>esta semana</div>}</td>
+                    {['A','B','C'].map(k=>[
+                      <td key={k+'r'} style={{padding:'8px 6px',fontWeight:600,color:x.f[k].recogido?C.ok:C.faint}}>{x.f[k].recogido?fmt(x.f[k].recogido):'\u2014'}</td>,
+                      <td key={k+'p'} style={{padding:'8px 6px',color:x.f[k].capital?C.text:C.faint}}>{x.f[k].capital?fmt(x.f[k].capital):'\u2014'}{x.f[k].nPrestamos>0&&<div style={{fontSize:10,color:C.faint}}>{x.f[k].nPrestamos} cli.</div>}</td>,
+                    ])}
+                    <td style={{padding:'8px 6px',fontWeight:700,color:totR?C.ok:C.faint}}>{totR?fmt(totR):'\u2014'}</td>
+                    <td style={{padding:'8px 6px',fontWeight:700,color:neto>0?C.ok:neto<0?C.danger:C.faint}}>{(totR||totP)?(neto>0?'+':'')+fmt(neto):'\u2014'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
           </table>
         </div>
       </Panel>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:12}}>
+        <Panel title="Cobros esta semana">
+          {['A','B','C'].map(k=>{
+            const xs=coEsta.filter(x=>x.p.ruta===k);
+            if(!xs.length)return null;
+            const e2=xs.reduce((s,x)=>s+x.p.cuota,0);
+            const rc=xs.reduce((s,x)=>s+(abonoMonto(x.p,x.i)||0),0);
+            return(
+              <div key={k} style={{marginBottom:12}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}><span><RTag r={k}/><CobTag r={k}/></span><span style={{fontSize:12}}><b style={{color:C.ok}}>{fmt(rc)}</b> <span style={{color:C.faint}}>/ {fmt(e2)}</span></span></div>
+                {xs.slice(0,3).map((x,i)=>{const m=abonoMonto(x.p,x.i);return(
+                  <div key={i} onClick={()=>setModalCliente(x.p)} style={{fontSize:12,color:m==null?C.muted:m===0?C.danger:m<x.p.cuota?C.warn:C.ok,padding:'3px 4px',cursor:'pointer',borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.background=C.s2} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    {x.p.nombre} \u2014 C{x.i+1} \u2014 {m==null?'sin registrar':fmt(m)}
+                  </div>
+                );})}
+                {xs.length>3&&<div style={{fontSize:11,color:C.faint,cursor:'pointer'}} onClick={()=>setModalKpi('activos')}>+{xs.length-3} m\xe1s \u2192</div>}
+              </div>
+            );
+          })}
+          {coEsta.length===0&&<div style={{fontSize:13,color:C.faint,textAlign:'center',padding:'1rem'}}>Sin cobros esta semana</div>}
+        </Panel>
+        <Panel title="Resumen por ruta">
+          {['A','B','C'].map(k=>{
+            const ps=activos.filter(p=>p.ruta===k);
+            const tot=ps.reduce((s,p)=>s+saldoTotal(p),0);
+            const at=ps.reduce((s,p)=>s+saldoAtrasado(p),0);
+            return(
+              <div key={k} onClick={()=>setModalKpi('porCobrar')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 4px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',borderRadius:6,transition:'background .1s'}} onMouseEnter={e=>e.currentTarget.style.background=C.s2} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                <div><RTag r={k}/><CobTag r={k}/><div style={{fontSize:11,color:C.faint,marginTop:2}}>{RUTAS[k].dia} \xb7 {ps.length} clientes{at>0.5?<span style={{color:C.danger}}> \xb7 {fmt(at)} atras.</span>:null}</div></div>
+                <span style={{fontSize:14,fontWeight:700}}>{fmt(tot)} <span style={{fontSize:11,color:C.green}}>\u2192</span></span>
+              </div>
+            );
+          })}
+        </Panel>
+      </div>
     </div>
   );
 }
