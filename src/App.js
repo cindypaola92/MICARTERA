@@ -31,11 +31,16 @@ function fmt(n){const v=Math.round(n);return(v<0?'-$':'$')+Math.abs(v).toLocaleS
 function fmtF(d){return DIAS[d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()];}
 function fmtFL(d){return d.getDate()+' de '+MESES_L[d.getMonth()]+' de '+d.getFullYear();}
 function fechasCuotas(p){const ini=parseD(p.fechaPrestamo);return Array.from({length:10},(_,k)=>{const d=new Date(ini);d.setDate(d.getDate()+7*(k+1));return d;});}
-function getAbonos(p){const ab=p.abonos||[];if(Array.isArray(ab))return ab;return Object.values(ab);}
+// Firebase puede devolver los abonos como objeto: se conserva la posicion real de cada cuota
+function getAbonos(p){const ab=p.abonos||[];if(Array.isArray(ab))return ab;const out=[];Object.keys(ab).forEach(k=>{out[Number(k)]=ab[k];});return Array.from(out,a=>a||null);}
+// Dia de cobro de la ruta dentro de la semana que empieza en lun
+function diaCobroRuta(p,lun){const d=new Date(lun);if(RUTAS[p.ruta]&&RUTAS[p.ruta].dia==='Jueves')d.setDate(d.getDate()+3);return d;}
 function totalAbonado(p){return getAbonos(p).reduce((s,a)=>s+((a&&a.monto)||0),0);}
 function totalDeuda(p){return p.monto*1.4;}
 function saldoTotal(p){return Math.max(0,totalDeuda(p)-totalAbonado(p));}
 function isTerminado(p){return totalAbonado(p)>=totalDeuda(p)-0.5;}
+// Pide confirmacion si un abono supera el saldo disponible del prestamo
+function confirmarAbono(p,i,monto){const a=getAbonos(p)[i];const saldo=Math.max(0,saldoTotal(p)+(a&&a.monto?a.monto:0));if(monto<=saldo+0.5)return true;return window.confirm('El abono de '+fmt(monto)+' es mayor que el saldo de '+p.nombre+' ('+fmt(saldo)+').\n\nAceptar: guardar de todas formas.\nCancelar: volver a corregir.');}
 function saldoCuota(p,i){const a=getAbonos(p)[i];const m=a?a.monto:null;return m==null?p.cuota:Math.max(0,p.cuota-m);}
 function cuotasVencidas(p){const h=HOY();return fechasCuotas(p).map((f,i)=>({f,i})).filter(x=>x.f<=h);}
 function saldoAtrasado(p){const c=fechasCuotas(p);const h=HOY();if(c[9]<h&&saldoTotal(p)>0.5)return saldoTotal(p);return cuotasVencidas(p).reduce((s,x)=>s+saldoCuota(p,x.i),0);}
@@ -327,7 +332,7 @@ function Dashboard({prestamos,salidas,flujoOff,setFlujoOff,onVerCliente}){
     if(!tienePlan&&saldoTotal(p)>0.5&&fs[9]<=dh){
       const abs=getAbonos(p);
       const abEsta=abs.some(a=>a&&a.fecha&&enRango(parseD(a.fecha),lh,dh));
-      if(!abEsta)coEsta.push({p,i:abs.length,ext:true,pendiente:true});
+      if(!abEsta)coEsta.push({p,i:Math.max(10,abs.length),ext:true,pendiente:true});
     }
   });
   const esp=coEsta.reduce((s,x)=>s+x.p.cuota,0);
@@ -497,10 +502,17 @@ function CobrosView({prestamos,onSave,semOff,setSemOff,currentUser,onVerCliente}
         const fAbono=a&&a.fecha?parseD(a.fecha):null;
         if(fAbono&&enRango(fAbono,lun,dom)){out.push({p,i,f:fAbono,ext:true});tienePlanEsta=true;}
       });
+      // Pagos de semanas posteriores al plan que quedaron guardados en cuotas 1-10
+      if(cuotas[9]<lun){
+        abs.slice(0,10).forEach((a,i)=>{
+          const fAbono=a&&a.fecha?parseD(a.fecha):null;
+          if(fAbono&&a.monto>0&&enRango(fAbono,lun,dom)){out.push({p,i,f:fAbono,ext:true});tienePlanEsta=true;}
+        });
+      }
       // Si no hay cuota del plan esta semana y el plan vencio con saldo pendiente, mostrar como pendiente
       // Condición: cuota 10 ya venció (antes o durante esta semana) y tiene saldo
       if(!tienePlanEsta&&saldoTotal(p)>0.5&&cuotas[cuotas.length-1]<=dom){
-        out.push({p,i:abs.length,f:lun,ext:true,pendiente:true});
+        out.push({p,i:Math.max(10,abs.length),f:diaCobroRuta(p,lun),ext:true,pendiente:true});
       }
     });
     return out;
@@ -523,8 +535,8 @@ function CobrosView({prestamos,onSave,semOff,setSemOff,currentUser,onVerCliente}
         <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:620}}>
           <thead><tr>{['Cliente','Cuota','Vence','Pactado','Abono','Saldo','Rapido'].map((t,i)=><th key={i} style={{textAlign:'left',padding:'6px 8px',fontSize:11,color:MT,fontWeight:700,borderBottom:'2px solid '+BD}}>{t}</th>)}</tr></thead>
           <tbody>{xs.map((x,idx)=>{
-            const m=(x.p.abonos||[])[x.i]?((x.p.abonos||[])[x.i].monto||null):null;
-            const fa=(x.p.abonos||[])[x.i]?((x.p.abonos||[])[x.i].fecha||null):null;
+            const m=getAbonos(x.p)[x.i]?(getAbonos(x.p)[x.i].monto||null):null;
+            const fa=getAbonos(x.p)[x.i]?(getAbonos(x.p)[x.i].fecha||null):null;
             const saldo=x.ext?saldoTotal(x.p):saldoCuota(x.p,x.i);
             const rowBg=x.ext?DNB+'44':m===0||m===null&&x.f<h?DNB+'44':undefined;
             const nLabel=x.ext?'C'+(x.i+1)+' ★':'C'+(x.i+1);
@@ -553,7 +565,7 @@ function CobrosView({prestamos,onSave,semOff,setSemOff,currentUser,onVerCliente}
                     if(ev.key==='Enter'){
                       const val=ev.target.value;
                       const n=parseFloat(val);
-                      if(val!==''&&!isNaN(n)&&n>=0){
+                      if(val!==''&&!isNaN(n)&&n>=0&&confirmarAbono(x.p,x.i,n)){
                         onSave(x.p.id,x.i,val,toDS(x.f));
                         setInputVals(prev=>{const nx={...prev};delete nx[x.p.id+'-'+x.i];return nx;});
                       }
@@ -1123,6 +1135,32 @@ function SalidasView({salidas,onSaveSalida,onDeleteSalida,prestamos}){
   </div>;
 }
 
+function ModalCorregirAbonos({p,onSave,onClose}){
+  if(!p)return null;
+  const filas=getAbonos(p).map((a,i)=>({a,i})).filter(x=>x.a);
+  const saldo=saldoTotal(p);
+  const inp={padding:'6px 7px',border:'1px solid '+BDS,borderRadius:6,background:SF,color:TX,fontSize:13,fontFamily:'inherit'};
+  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200,padding:12}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:SF,borderRadius:14,width:'100%',maxWidth:680,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 24px 48px rgba(0,0,0,.28)',padding:'18px 20px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:10}}>
+        <div style={{fontSize:16,fontWeight:700}}>Corregir abonos: {p.nombre}</div>
+        <Btn sm onClick={onClose}>Cerrar</Btn>
+      </div>
+      <div style={{fontSize:13,color:MT,marginBottom:6}}>Total a pagar <b>{fmt(totalDeuda(p))}</b> - Abonado <b style={{color:OK}}>{fmt(totalAbonado(p))}</b> - Saldo <b style={{color:saldo>0.5?DN:OK}}>{fmt(saldo)}</b></div>
+      <div style={{fontSize:12,fontWeight:600,padding:'7px 10px',borderRadius:7,marginBottom:12,background:saldo>0.5?WNB:OKB,color:saldo>0.5?WN:OK}}>{saldo>0.5?'Este cliente queda activo con saldo pendiente.':'Este cliente sigue saldado.'}</div>
+      <div style={{fontSize:12,color:MT,marginBottom:10}}>Cambia el valor o la fecha y presiona Enter.</div>
+      {filas.length===0?<Empty msg="Sin abonos registrados."/>:filas.map(({a,i})=><div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid '+BD,flexWrap:'wrap'}}>
+        <b style={{width:38,fontSize:12,color:i>=10?WN:TX}}>C{i+1}</b>
+        <input key={'m'+i+'-'+a.monto} aria-label={'Valor cuota '+(i+1)} type="number" min="0" defaultValue={Math.round(a.monto)} style={{...inp,width:110}}
+          onKeyDown={e=>{if(e.key==='Enter')e.target.blur();}}
+          onBlur={e=>{const n=parseFloat(e.target.value);const actual=Math.round(a.monto);if(isNaN(n)||n<0||n===actual){e.target.value=actual;return;}if(confirmarAbono(p,i,n))onSave(p.id,i,String(n));else e.target.value=actual;}}/>
+        <input key={'f'+i+'-'+a.fecha} aria-label={'Fecha cuota '+(i+1)} type="date" defaultValue={a.fecha} style={{...inp,width:140}} onChange={e=>{if(e.target.value)onSave(p.id,i,null,null,e.target.value);}}/>
+        <Btn sm v="danger" onClick={()=>{if(window.confirm('Eliminar el abono de '+fmt(a.monto)+'?'))onSave(p.id,i,'limpiar');}}>Eliminar</Btn>
+      </div>)}
+    </div>
+  </div>;
+}
+
 function SaldadosView({prestamos,onVerCliente,onCorregir}){
   const [rf,setRf]=useState('');
   const [nombre,setNombre]=useState('');
@@ -1311,6 +1349,7 @@ export default function App(){
   const [view,setView]=useState('dashboard');
   const [editando,setEditando]=useState(null);
   const [clienteModal,setClienteModal]=useState(null);
+  const [corrigiendoId,setCorrigiendoId]=useState(null);
   const [semOff,setSemOff]=useState(0);
   const [flujoOff,setFlujoOff]=useState(0);
   const [toasts,setToasts]=useState([]);
@@ -1376,7 +1415,7 @@ export default function App(){
     if(esNumerico&&(isNaN(numVal)||numVal<0))return;
     const next=prestamos.map(p=>{
       if(p.id!==id)return p;
-      const rawAb=p.abonos?(Array.isArray(p.abonos)?p.abonos:Object.values(p.abonos)):[];
+      const rawAb=getAbonos(p);
       const abs=[...rawAb];
       while(abs.length<=idx)abs.push(null);
       const fDef=idx<10?toDS(fechasCuotas(p)[idx]):(fSem||todayDS());
@@ -1415,6 +1454,7 @@ export default function App(){
 
   return <div style={{display:'flex',height:'100vh',fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif',color:TX,background:'#F0F2F0',WebkitFontSmoothing:'antialiased'}}>
     {clienteModal&&<ModalCliente p={clienteModal} onClose={()=>setClienteModal(null)}/>}
+    {corrigiendoId&&<ModalCorregirAbonos p={prestamos.find(p=>p.id===corrigiendoId)} onSave={handleSave} onClose={()=>setCorrigiendoId(null)}/>}
     <nav style={{width:204,minWidth:204,background:SF,borderRight:'1px solid '+BD,display:'flex',flexDirection:'column',padding:'10px 0',height:'100vh',overflowY:'auto'}}>
       <div style={{padding:'0 13px 12px',borderBottom:'1px solid '+BD,marginBottom:5}}>
         <div style={{fontSize:16,fontWeight:700,color:G}}>Mi Cartera</div>
@@ -1434,7 +1474,7 @@ export default function App(){
       {view==='consolidado'&&<ConsolidadoView prestamos={prestamos} onEdit={p=>{setEditando(p);setView('nuevo');}} onDelete={handleDelete} currentUser={currentUser} onVerCliente={setClienteModal}/>}
       {view==='cartera'&&<CarteraActivaView prestamos={prestamos} salidas={salidas} onVerCliente={setClienteModal}/>}
       {view==='riesgo'&&<RiesgoView prestamos={prestamos} currentUser={currentUser} onVerCliente={setClienteModal}/>}
-      {view==='saldados'&&<SaldadosView prestamos={prestamos} onVerCliente={setClienteModal} onCorregir={p=>{setEditando(p);setView('nuevo');}}/>}
+      {view==='saldados'&&<SaldadosView prestamos={prestamos} onVerCliente={setClienteModal} onCorregir={p=>setCorrigiendoId(p.id)}/>}
       {view==='finanzas'&&currentUser.rol==='admin'&&<FinanzasView prestamos={prestamos} salidas={salidas} onSaveSalida={handleSaveSalida} onDeleteSalida={handleDeleteSalida} onVerCliente={setClienteModal}/>}
       {view==='salidas'&&currentUser.rol==='admin'&&<SalidasView salidas={salidas} onSaveSalida={handleSaveSalida} onDeleteSalida={handleDeleteSalida} prestamos={prestamos}/>}
       {view==='respaldo'&&currentUser.rol==='admin'&&<RespaldoView prestamos={prestamos} salidas={salidas} onRestaurar={handleRestaurar} ultimaSync={ultimaSync}/>}
